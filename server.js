@@ -1,4 +1,6 @@
 const pg = require('pg');
+const express = require('express');
+const app = express();
 
 const client = new pg.Client(process.env.DATABASE_URL || 'postgres://localhost/acme_notes_categories_gh_db');
 
@@ -35,6 +37,10 @@ const init = async()=> {
   `;
   await client.query(SQL);
   console.log('data seeded.');
+  const port = process.env.PORT || 3000;
+  app.listen(port, ()=> {
+    console.log(`listening on port ${port}`);
+  });
 
 }
 
