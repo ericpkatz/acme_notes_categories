@@ -1,0 +1,235 @@
+
+<!DOCTYPE html>
+<html>
+<body>
+  <div id="root"></div>
+</body>
+<!-- This setup is not suitable for production. -->
+<!-- Only use it in development! -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script async src="https://ga.jspm.io/npm:es-module-shims@1.7.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react?dev",
+    "react-router-dom": "https://esm.sh/react-router-dom?dev",
+    "react-dom/client": "https://esm.sh/react-dom/client?dev"
+  }
+}
+</script>
+<script type="text/babel" data-type="module">
+import React, { useState, useEffect, StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { HashRouter, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom';
+
+const Notes = ({ notes, categories })=> {
+  const { id } = useParams();
+  return (
+    <ul>
+      {
+        notes.map( note => {
+          const category = categories.find(category => category.id === note.category_id) || {};
+          return (
+            <li key={ note.id } className={ id*1 === note.id ? 'selected': ''}>
+              <Link to={`/${note.id}`}>{ note.txt } ({ note.ranking })</Link> { category.name }
+            </li>
+          );
+        })
+      }
+    </ul>
+  );
+};
+
+const NoteForm = ({ notes, destroy, save, categories })=> {
+  const [txt, setTxt ] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [ranking, setRanking ] = useState(5);
+  const { id } = useParams();
+
+  useEffect(()=> {
+    const note = notes.find( note => note.id === id*1);
+    if(note){
+      setTxt(note.txt);
+      setRanking(note.ranking);
+      setCategoryId(note.category_id);
+    }
+  }, [notes, id]);
+
+  const note = notes.find( note => note.id === id*1) || {};
+
+  const submit = async(ev)=> {
+    ev.preventDefault();
+    await save({ ...note, txt, ranking, category_id: categoryId});
+    if(!id){
+      setTxt('');
+      setRanking(5);
+      setCategoryId('');
+    }
+  }
+  return (
+    <>
+      <form onSubmit={ submit }>
+        <input value={ txt } onChange={ ev => setTxt(ev.target.value)} />
+        <select value={ ranking } onChange={ev => setRanking(ev.target.value)}>
+        {
+          new Array(20).fill('').map((_, idx)=> {
+            return (
+              <option key={ idx }>
+                { idx + 1}
+              </option>
+            );
+          })
+        }
+        </select>
+        <select value={ categoryId } onChange={ev => setCategoryId(ev.target.value)}>
+          <option value=''>--- choose a category ---</option>
+        {
+          categories.map( category => {
+            return (
+              <option key={ category.id } value={ category.id }>
+                { category.name }
+              </option>
+            );
+          })
+        }
+        </select>
+        <button disabled={ note.txt === txt && note.ranking === ranking && note.category_id === categoryId}>{ id ? 'update': 'create'}</button>
+      </form>
+      {
+        !!id && (
+          <>
+            <Link to='/'>Cancel</Link>
+            <button onClick={ ()=> destroy(note)}>Delete</button>
+          </>
+        )
+      }
+    </>
+  );
+};
+
+const Note = ({ notes, destroy, update, categories})=> {
+  return (
+    <>
+      <Notes notes={ notes } categories={ categories }/>
+      <NoteForm notes={ notes } destroy={ destroy } save={ update } categories={ categories }/>
+    </>
+  );
+};
+
+const App = ()=>{
+  const [notes, setNotes] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const navigate = useNavigate();
+
+  useEffect(()=> {
+    const fetchNotes = async()=> {
+      const response = await fetch('/api/notes');
+      const json = await response.json();
+      setNotes(json);
+    };
+    fetchNotes();
+  }, []);
+
+  useEffect(()=> {
+    const fetchCategories = async()=> {
+      const response = await fetch('/api/categories');
+      const json = await response.json();
+      setCategories(json);
+    };
+    fetchCategories();
+  }, []);
+
+  const destroy = async(note) => {
+    await fetch(`/api/notes/${note.id}`, { method: 'delete'}); 
+    setNotes(notes.filter(_note => _note.id !== note.id));
+    navigate('/');
+  };
+
+  const create = async(note) => {
+    const response = await fetch('/api/notes',
+      {
+        method: 'post',
+        body: JSON.stringify({ txt: note.txt, ranking: note.ranking, category_id: note.category_id }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    ); 
+    const json = await response.json()
+    if(response.ok){
+      setNotes([...notes, json]);
+      navigate(`/${json.id}`);
+    }
+    else {
+      console.log(json);
+    }
+  };
+  
+  const update = async(note) => {
+    const response = await fetch(`/api/notes/${note.id}`,
+      {
+        method: 'put',
+        body: JSON.stringify({ txt: note.txt, ranking: note.ranking, category_id: note.category_id }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    ); 
+    const json = await response.json()
+    if(response.ok){
+      setNotes(notes.map(note => note.id === json.id ? json : note));
+    }
+    else {
+      console.log(json);
+    }
+  };
+  
+  return (
+    <div>
+      <h1>Acme Notes ({ notes.length})</h1>
+      <NoteForm save={ create } notes={[]} categories={ categories }/>
+      <Routes>
+        <Route path='/' element={ <Notes notes={ notes } categories={ categories }/> } />
+        <Route path='/:id' element={ <Note update={ update } categories={ categories } notes={ notes} destroy={ destroy }/>} />
+      </Routes>
+    </div>
+  );
+}
+
+
+const root = createRoot(document.getElementById('root'));
+root.render(
+  <StrictMode>
+    <HashRouter>
+      <App />
+    </HashRouter>
+  </StrictMode>
+);
+</script>
+<style>
+  body {
+    font-family: verdana;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    border: solid 1px dodgerBlue;
+  }
+
+  form > * {
+    margin: 1rem;
+  }
+
+  li {
+    padding: 0.25rem;
+  }
+
+  .selected {
+    background-color: dodgerBlue;
+  }
+
+  .selected a {
+    color: cornSilk;
+  }
+</style>
+</html>

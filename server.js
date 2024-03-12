@@ -2,13 +2,14 @@ const pg = require('pg');
 const express = require('express');
 const app = express();
 const morgan = require('morgan');
+const path = require('path');
 
 const client = new pg.Client(process.env.DATABASE_URL || 'postgres://localhost/acme_notes_categories_gh_db');
 
 app.use(express.json());
 app.use(morgan('dev'));
 
-
+app.get('/', (req, res)=> res.sendFile(path.join(__dirname, 'index.html')));
 app.delete('/api/notes/:id', async(req, res, next)=> {
   try {
     const SQL = `
